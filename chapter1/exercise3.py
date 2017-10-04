@@ -46,7 +46,7 @@ def precompute_similar_person(prefs):
     return similar_persons_map
 
 def get_recommendations(prefs, persons_with_persons_similitude_dict, top=5):
-    recommendations_for_user = dict([person, ()] for person in prefs)
+    recommendations_for_user = {}
 
     for person in persons_with_persons_similitude_dict:
         tmp_movie_score = {}

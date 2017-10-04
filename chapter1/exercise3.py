@@ -45,34 +45,26 @@ def precompute_similar_person(prefs):
 
     return similar_persons_map
 
-
-def transform_data_to_movie_score(prefs):
-    movies_scores = {}
-    for person in prefs:
-        for scored_movie in prefs[person]:
-            if not scored_movie in movies_scores:
-                movies_scores[scored_movie] = []
-            movies_scores[scored_movie].append((person, prefs[person][scored_movie]))
-    return movies_scores
-
-
-def get_recommendations(prefs, similitude, movies_scores_tuple_list, top=5):
+def get_recommendations(prefs, persons_with_persons_similitude_dict, top=5):
     recommendations_for_user = dict([person, ()] for person in prefs)
 
-    for person in similitude:
-        tmp_movie_score = dict([movie, { 'total_score': 0, 'weigh' : 0.0}] for movie in movies_scores)
-        for similar_person in similitude[person][:top]:
-            for movie in movies_scores_tuple_list:
-                if movie not in prefs[person] and movie in prefs[similar_person[0]]:
-                    tmp_movie_score[movie]['weigh'] = tmp_movie_score[movie]['weigh'] + similar_person[1]
-                    tmp_movie_score[movie]['total_score'] = tmp_movie_score[movie]['total_score'] + similar_person[1] * prefs[similar_person[0]][movie]
+    for person in persons_with_persons_similitude_dict:
+        tmp_movie_score = {}
+        for similar_person in persons_with_persons_similitude_dict[person][:top]:
+            similar_person_name = similar_person[0]
+            for movie in prefs[similar_person_name]:
+                if movie not in prefs[person]:
+                    if movie not in tmp_movie_score:
+                        tmp_movie_score[movie] = {'total_score': 0, 'weigh': 0.0}
+                    tmp_movie_score[movie]['weigh'] += similar_person[1]
+                    tmp_movie_score[movie]['total_score'] += similar_person[1] * prefs[similar_person_name][movie]
 
-        tmp_movie_score = [(movie[0], movie[1]['total_score'] / movie[1]['weigh']) for movie in tmp_movie_score.items() if movie[1]['total_score'] != 0]
+        tmp_movie_score = [(movie[0], movie[1]['total_score'] / movie[1]['weigh']) for movie in tmp_movie_score.items()
+                           if movie[1]['total_score'] != 0]
         recommendations_for_user[person] = tmp_movie_score
     return recommendations_for_user
 
 
 if __name__ == "__main__":
     similitude = precompute_similar_person(critics)
-    movies_scores = transform_data_to_movie_score(critics)
-    print get_recommendations(critics, similitude, movies_scores)
+    print get_recommendations(critics, similitude)

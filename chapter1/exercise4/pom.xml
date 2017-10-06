@@ -61,6 +61,11 @@
 			<version>3.6</version>
 		</dependency>
 
+		<dependency>
+			<groupId>io.vavr</groupId>
+			<artifactId>vavr</artifactId>
+			<version>0.9.1</version>
+		</dependency>
 
 	</dependencies>
 
@@ -72,6 +77,5 @@
 			</plugin>
 		</plugins>
 	</build>
-
 
 </project>

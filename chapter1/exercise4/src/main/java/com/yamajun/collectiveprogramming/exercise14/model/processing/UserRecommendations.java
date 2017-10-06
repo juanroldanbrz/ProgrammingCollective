@@ -1,19 +1,17 @@
 package com.yamajun.collectiveprogramming.exercise14.model.processing;
 
-import java.util.TreeMap;
-
-import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
-@Document
 @Data
-public class SimilarityToUserId {
+@AllArgsConstructor
+@Document
+public class UserRecommendations {
     
-    @Id
     private String userId;
-
-    TreeMap<Double, String> similarityToUserId;
-
+    private String movieId;
+    private String movieName;
+    private Double recommendationScore;
 }

@@ -64,4 +64,5 @@ if __name__ == "__main__":
     rows = get_bookmark_id_to_url_map('bookmarks.dat')
     columns = get_tag_id_to_tag_name_map('tags.dat')
     data = get_tag_to_tag_id_to_tag_weight('bookmark_tags.dat')
+
     generate_matrix_file(columns, rows, data)

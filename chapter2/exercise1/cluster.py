@@ -11,7 +11,7 @@ def readfile(filename):
     colnames = lines[0].strip().split('\t')[1:]
     rownames = []
     data = []
-    for line in lines[1:]:
+    for line in tqdm(lines[1:][:1000]):
         p = line.strip().split('\t')
         # First column in each row is the rowname
         rownames.append(p[0])
@@ -36,24 +36,19 @@ def pearson(v1, v2):
         return 0
     return 1.0 - num / den
 
-class bicluster:
-    def __init__(self, vec, left=None, right=None, distance=0.0, id=None):
-        self.left = left
-        self.right = right
-        self.vec = vec
-        self.id = id
-        self.distance = distance
 
-
-def kcluster(rows, distance=pearson, k=4):
+def kcluster(rows, distance=pearson, k=100):
     # Determine the minimum and maximum values for each point
+    print("Calculating ranges")
     ranges = [(min([row[i] for row in rows]), max([row[i] for row in rows]))
               for i in range(len(rows[0]))]
 
+    print("Calculating initial clusters")
     # Create k randomly placed centroids
     clusters = [[random.random() * (ranges[i][1] - ranges[i][0]) + ranges[i][0]
                  for i in range(len(rows[0]))] for j in range(k)]
 
+    print("Clustering")
     lastmatches = None
     for t in tqdm(range(100)):
         bestmatches = [[] for i in range(k)]
@@ -87,65 +82,23 @@ def kcluster(rows, distance=pearson, k=4):
     return bestmatches
 
 
-def getheight(clust):
-    # Is this an endpoint? Then the height is just 1
-    if clust.left == None and clust.right == None: return 1
-    # Otherwise the height is the same of the heights of
-    # each branch
-    return getheight(clust.left) + getheight(clust.right)
-
-
-def getdepth(clust):
-    # The distance of an endpoint is 0.0
-    if clust.left == None and clust.right == None: return 0
-    # The distance of a branch is the greater of its two sides
-    # plus its own distance
-    return max(getdepth(clust.left), getdepth(clust.right)) + clust.distance
-
-
-def drawdendrogram(clust, labels, jpeg='clusters.jpg'):
-    # height and width
-    h = getheight(clust) * 20
-    w = 1200
-    depth = getdepth(clust)
-    # width is fixed, so scale distances accordingly
-    scaling = float(w - 150) / depth
-    # Create a new image with a white background
-    img = Image.new('RGB', (w, h), (255, 255, 255))
-    draw = ImageDraw.Draw(img)
-    draw.line((0, h / 2, 10, h / 2), fill=(255, 0, 0))
-    # Draw the first node
-    drawnode(draw, clust, 10, (h / 2), scaling, labels)
-    img.save(jpeg, 'JPEG')
-
-
-def drawnode(draw, clust, x, y, scaling, labels):
-    if clust.id < 0:
-        h1 = getheight(clust.left) * 20
-        h2 = getheight(clust.right) * 20
-        top = y - (h1 + h2) / 2
-        bottom = y + (h1 + h2) / 2
-        # Line length
-        ll = clust.distance * scaling
-        # Vertical line from this cluster to children
-        draw.line((x, top + h1 / 2, x, bottom - h2 / 2), fill=(255, 0, 0))
-        # Horizontal line to left item
-        draw.line((x, top + h1 / 2, x + ll, top + h1 / 2), fill=(255, 0, 0))
-        # Horizontal line to right item
-        draw.line((x, bottom - h2 / 2, x + ll, bottom - h2 / 2), fill=(255, 0, 0))
-        drawnode(draw, clust.left, x + ll, top + h1 / 2, scaling, labels)
-        drawnode(draw, clust.right, x + ll, bottom - h2 / 2, scaling, labels)
-    else:
-        try:
-            # If this is an endpoint, draw the item label
-            draw.text((x + 5, y - 7), labels[clust.id], (0, 0, 0))
-        except UnicodeEncodeError:
-            pass
+def draw2d(data,labels,jpeg='mds2d.jpg'):
+    img=Image.new('RGB',(2000,2000),(255,255,255))
+    draw=ImageDraw.Draw(img)
+    for i in range(len(data)):
+        x=(data[i][0]+0.5)*1000
+        y=(data[i][1]+0.5)*1000
+        draw.text((x,y),labels[i],(0,0,0))
+    img.save(jpeg,'JPEG')
 
 
 print("Parsing data file...")
 blognames, words, data = readfile('bookmark_matrix.csv')
 print("Clustering data...")
 clust = kcluster(data)
-print("Drawing data...")
-drawdendrogram(clust, labels=words, jpeg='wordclust.jpg')
+
+for matches in clust:
+    print("Group ...")
+    for blogid in matches:
+        print(blognames[blogid])
+    print(matches)

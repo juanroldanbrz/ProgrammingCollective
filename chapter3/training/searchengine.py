@@ -39,14 +39,9 @@ class crawler:
         else:
             return res[0]
 
-
-            # Index an individual page
-
-    def addtoindex(self, url, soup, pbar):
+    def addtoindex(self, url, soup):
         if self.isindexed(url):
             return
-        # print 'Indexing ' + url
-
         # Get the individual words
         text = self.gettextonly(soup)
         words = self.separatewords(text)
@@ -54,6 +49,7 @@ class crawler:
         urlid = self.getentryid('urllist', 'url', url)
 
         # Link each word to this url
+        print "Word inserted in wordlocation: %s" % str(len(words))
         for i in range(len(words)):
             word = words[i]
             if word in ignorewords:
@@ -84,13 +80,9 @@ class crawler:
 
     # Return true if this url is already indexed
     def isindexed(self, url):
-        val = self.con.execute("select rowid from urllist where url = '%s'" % url).fetchone()
-        # If the page is indexed is it really crawled and words indexed?
-        if val != None:
-            wordcount = self.con.execute("select count(1) from urllist where url = '%s'" % url).fetchone()
-            return False if wordcount[0] == 0 else True
-        else:
-            return False
+        wordcount = self.con.execute(
+            "select count(wordlocation.urlid) from wordlocation JOIN urllist ON wordlocation.urlid = urllist._rowid_ WHERE urllist.url = '%s'" % url).fetchone()
+        return False if wordcount[0] == 0 else True
 
     # Add a link between two pages
     def addlinkref(self, urlFrom, urlTo, linkText):
@@ -100,6 +92,7 @@ class crawler:
         if fromid == toid: return
         cur = self.con.execute("insert into link(fromid,toid) values (%d,%d)" % (fromid, toid))
         linkid = cur.lastrowid
+        # print "Appending " + str(len(words)) + "words"
         for word in words:
             if word in ignorewords: continue
             wordid = self.getentryid('wordlist', 'word', word)
@@ -108,44 +101,41 @@ class crawler:
     # Starting with a list of pages, do a breadth
     # first search to the given depth, indexing pages
     # as we go
-    def crawl(self, pages, number_of_pages=1000):
-        with tqdm(total=number_of_pages) as pbar:
-            should_continue = True
-            while (self.pages_crawled < number_of_pages and len(pages) != 0):
-                newpages = list()
-                for page in pages:
-                    if self.pages_crawled > number_of_pages or len(pages) == 0:
-                        break
-                    pbar.set_description('Crawling %s...' % page)
-                    try:
-                        c = urllib2.urlopen(page, timeout=5000)
-                    except:
-                        continue
-                    try:
-                        soup = BeautifulSoup(c.read())
-                        self.addtoindex(page, soup, pbar)
+    def crawl(self, pages, depth=4):
+        crawled_pages = 0
+        for j in tqdm(range(depth)):
+            newpages = list()
+            for page in pages:
+                try:
+                    c = urllib2.urlopen(page, timeout=5000)
+                except:
+                    continue
+                try:
+                    soup = BeautifulSoup(c.read())
+                    self.addtoindex(page, soup)
+                    crawled_pages +=1
+                    print("Crawling: %s . Num of crawled: %d" % (page, crawled_pages))
 
-                        links = remove_duplicate_url(filter(
-                            lambda web: 'view_video.php' in web['href'] and 'title' in web.attrMap and web[
-                                                                                                           'title'] != '',
-                            soup.findAll('a', href=True)))
-                        for link in links:
-                            url = urljoin(page, link['href'].split('&')[0])
-                            if url.find("'") != -1: continue
-                            url = url.split('#')[0]  # remove location portion
-                            if url[0:4] == 'http' and not self.isindexed(url):
-                                newpages.append(url)
+                    links = remove_duplicate_url(filter(
+                        lambda web: 'view_video.php' in web['href'] and 'title' in web.attrMap and web[
+                                                                                                       'title'] != '',
+                        soup.findAll('a', href=True)))
 
-                            linkText = link['title']
-                            self.addlinkref(page, url, linkText)
+                    for link in links:
+                        url = urljoin(page, link['href'].split('&')[0])
+                        if url.find("'") != -1: continue
+                        url = url.split('#')[0]  # remove location portion
+                        if url[0:4] == 'http' and not self.isindexed(url):
+                            newpages.append(url)
 
-                        pbar.update(1)
-                        self.pages_crawled += 1
-                        self.dbcommit()
-                    except:
-                        continue
+                        linkText = link['title']
+                        self.addlinkref(page, url, linkText)
 
-                pages = newpages
+                    self.dbcommit()
+                except:
+                    continue
+
+            pages = newpages
 
     # Create the database tables
     def createindextables(self):
@@ -160,6 +150,48 @@ class crawler:
         self.con.execute('create index urltoidx on link(toid)')
         self.con.execute('create index urlfromidx on link(fromid)')
         self.dbcommit()
+
+
+class searcher:
+    def __init__(self, dbname):
+        self.con = sqlite3.connect(dbname)
+
+    def __del__(self):
+        self.con.close()
+
+    def getmatchrows(self, q):
+        # Strings to build the query
+        fieldlist = 'w0.urlid'
+        tablelist = ''
+        clauselist = ''
+        wordids = []
+
+        # Split the words by spaces
+        words = q.split(' ')
+        tablenumber = 0
+
+        for word in words:
+            # Get the word ID
+            wordrow = self.con.execute(
+                "select rowid from wordlist where word='%s'" % word).fetchone()
+            if wordrow != None:
+                wordid = wordrow[0]
+                wordids.append(wordid)
+                if tablenumber > 0:
+                    tablelist += ','
+                    clauselist += ' and '
+                    clauselist += 'w%d.urlid=w%d.urlid and ' % (tablenumber - 1, tablenumber)
+                fieldlist += ',w%d.location' % tablenumber
+                tablelist += 'wordlocation w%d' % tablenumber
+                clauselist += 'w%d.wordid=%d' % (tablenumber, wordid)
+                tablenumber += 1
+
+        # Create the query from the separate parts
+        fullquery = 'select %s from %s where %s' % (fieldlist, tablelist, clauselist)
+        print fullquery
+        cur = self.con.execute(fullquery)
+        rows = [row for row in cur]
+        return rows, wordids
 
 
 def remove_duplicate_url(urllist):
@@ -181,6 +213,6 @@ soup = BeautifulSoup(c.read())
 pagelist = filter(lambda web: 'view_video.php' in web['href'] and 'title' in web.attrMap and web['title'] != '',
                   soup.findAll('a', href=True))
 pageset = set([urljoin(page_to_crawl, page['href'].split('&')[0]) for page in pagelist])
-craw = crawler('hello.db')
+craw = crawler('data.db')
 craw.createindextables()
 craw.crawl(pages=pageset)
